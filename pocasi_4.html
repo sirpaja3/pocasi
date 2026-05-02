@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="theme-color" content="#080c14">
+<title>Počasí CZ</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:#080c14;color:#d8eaff;font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;overscroll-behavior:none}
+
+.hdr{display:flex;align-items:center;gap:8px;padding:10px 12px 6px;border-bottom:1px solid #1e3050}
+.hdr-title{font-size:15px;font-weight:700;color:#f0f6ff;letter-spacing:.04em;flex:1}
+.hdr-time{font-size:11px;color:#6a8ab0;font-variant-numeric:tabular-nums}
+
+.loc-bar{padding:8px 12px;border-bottom:1px solid #1e3050;display:flex;flex-direction:column;gap:6px}
+.loc-row{display:flex;gap:6px}
+.loc-input{flex:1;background:#0e1a2e;border:1px solid #243a60;border-radius:8px;color:#d8eaff;padding:7px 10px;font-size:13px;outline:none}
+.loc-input::placeholder{color:#3a5a7a}
+.loc-input:focus{border-color:#3a6aaa}
+.loc-btn{background:#0e1a2e;border:1px solid #243a60;border-radius:8px;color:#90b8e0;padding:7px 11px;font-size:12px;cursor:pointer;white-space:nowrap}
+.loc-btn:active{background:#1a2840}
+.gps-row{display:flex;gap:6px}
+.gps-row input{flex:1;background:#0e1a2e;border:1px solid #243a60;border-radius:8px;color:#d8eaff;padding:7px 10px;font-size:13px;outline:none}
+.gps-row input::placeholder{color:#3a5a7a}
+.gps-row input:focus{border-color:#3a6aaa}
+.gps-go{background:#1a3a70;border:none;border-radius:8px;color:#90c8ff;padding:7px 14px;font-size:13px;cursor:pointer;font-weight:700}
+.gps-go:active{background:#12295a}
+.sug-box{background:#0e1a2e;border:1px solid #243a60;border-radius:8px;overflow:hidden;display:none;max-height:200px;overflow-y:auto}
+.sug-box.open{display:block}
+.sug-item{padding:10px 12px;font-size:13px;color:#b0cce8;cursor:pointer;border-bottom:1px solid #142030;display:flex;align-items:baseline;gap:6px}
+.sug-item:last-child{border-bottom:none}
+.sug-item:active,.sug-item:hover{background:#142030}
+.sug-item b{color:#60b8ff}
+.sug-sub{font-size:11px;color:#486080;flex:1}
+.sug-coords{font-size:10px;color:#2a4060;margin-left:auto}
+
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#1e3050;border-bottom:1px solid #1e3050}
+.metric{background:#090f1c;padding:8px 4px;text-align:center}
+.metric-icon{font-size:16px;margin-bottom:2px}
+.metric-val{font-size:16px;font-weight:700;color:#f0f8ff;line-height:1;font-variant-numeric:tabular-nums}
+.metric-sub{font-size:10px;color:#7090b8;margin-top:2px}
+.metric-unit{font-size:9px;color:#3a5a80;margin-top:1px}
+
+.tabs{display:flex;border-bottom:2px solid #1e3050;background:#080c14;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{padding:9px 14px;font-size:12px;font-weight:600;color:#507090;cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;margin-bottom:-2px;transition:color .15s}
+.tab.active{color:#5ab0ff;border-bottom-color:#5ab0ff}
+
+.hover-bar{display:flex;gap:8px;padding:4px 10px;background:#0a1220;border-bottom:1px solid #0e1a2e;font-size:11px;color:#90b8d8;font-variant-numeric:tabular-nums;flex-wrap:wrap;min-height:22px;align-items:center}
+.hover-val{display:flex;align-items:center;gap:2px}
+.hover-val b{color:#d0e8ff;font-weight:600}
+
+/* all chart canvases rendered via JS */
+#chartCanvas{display:block;width:100%}
+
+.legend-bar{display:flex;gap:10px;flex-wrap:wrap;padding:3px 10px 5px;background:#080c14}
+.leg{display:flex;align-items:center;gap:4px;font-size:10px;color:#607090}
+.leg-swatch{width:16px;height:2px;flex-shrink:0}
+
+.state{text-align:center;padding:50px 20px;color:#507090;font-size:13px;line-height:1.8}
+.state-ico{font-size:36px;margin-bottom:10px}
+.status{font-size:10px;color:#1e3050;padding:3px 10px 5px;text-align:right}
+
+.pf-logo{position:fixed;bottom:8px;left:10px;z-index:100;opacity:.5;pointer-events:none;display:flex;align-items:center}
+.pf-cloud{background:#2a3a50;border-radius:8px;padding:2px 5px 2px 3px;font-size:11px;font-weight:700;color:#d4b820;display:flex;align-items:center;gap:2px}
+</style>
+</head>
+<body>
+<div id="app" style="display:flex;flex-direction:column;height:100vh;max-width:520px;margin:0 auto;position:relative">
+
+  <div class="hdr">
+    <span style="font-size:20px">🌤</span>
+    <span class="hdr-title">Počasí CZ <span style="color:#7090b0;font-weight:400;font-size:12px">(by PF)</span></span>
+    <span class="hdr-time" id="clock">--:--</span>
+  </div>
+
+  <div class="loc-bar">
+    <div class="loc-row">
+      <input class="loc-input" id="cityQ" placeholder="Název obce nebo města…" autocomplete="off" autocorrect="off" spellcheck="false">
+      <button class="loc-btn" onclick="useGPS()">📍 GPS</button>
+    </div>
+    <div class="sug-box" id="sugBox"></div>
+    <div class="gps-row">
+      <input class="loc-input" id="latIn" placeholder="Zeměšířka (49.8209)" type="number" step="0.0001">
+      <input class="loc-input" id="lonIn" placeholder="Zemědelšířka (18.2625)" type="number" step="0.0001">
+      <button class="gps-go" onclick="useCoords()">GO</button>
+    </div>
+  </div>
+
+  <div class="metrics" id="metrics" style="display:none">
+    <div class="metric"><div class="metric-icon">🌡</div><div class="metric-val" id="mTemp">–</div><div class="metric-sub" id="mFeel">–</div><div class="metric-unit">°C/pocit</div></div>
+    <div class="metric"><div class="metric-icon">💨</div><div class="metric-val" id="mWind">–</div><div class="metric-sub" id="mGust">–</div><div class="metric-unit">km/h/nárazy</div></div>
+    <div class="metric"><div class="metric-icon">💧</div><div class="metric-val" id="mHum">–</div><div class="metric-sub" id="mDew">–</div><div class="metric-unit">%vlhkost</div></div>
+    <div class="metric"><div class="metric-icon">🌫</div><div class="metric-val" id="mPres">–</div><div class="metric-sub" id="mCloud">–</div><div class="metric-unit">hPa/oblač</div></div>
+  </div>
+
+  <div class="tabs" id="tabs" style="display:none">
+    <div class="tab active" data-tab="temp"  onclick="setTab(this)">🌡 Teplota</div>
+    <div class="tab"        data-tab="wind"  onclick="setTab(this)">💨 Vítr</div>
+    <div class="tab"        data-tab="cloud" onclick="setTab(this)">☁ Oblačnost</div>
+    <div class="tab"        data-tab="hum"   onclick="setTab(this)">💧 Vlhkost</div>
+  </div>
+
+  <div id="chartSection" style="display:none;flex:1;flex-direction:column;overflow:hidden">
+    <div class="hover-bar" id="hoverBar">
+      <div class="hover-val">🌡<b id="hv_t">–</b>°C</div>
+      <div class="hover-val">💨<b id="hv_w">–</b>km/h</div>
+      <div class="hover-val">💧<b id="hv_h">–</b>%</div>
+      <div class="hover-val">☁<b id="hv_c">–</b>%</div>
+      <div style="margin-left:auto;font-size:10px;color:#507090" id="hv_time">teď</div>
+    </div>
+    <canvas id="chartCanvas"></canvas>
+    <div class="legend-bar" id="legendBar"></div>
+  </div>
+
+  <div class="state" id="stateDiv">
+    <div class="state-ico">🔍</div>
+    Zadej název obce, použij GPS<br>nebo zadej souřadnice
+  </div>
+  <div class="status" id="statusBar"></div>
+</div>
+
+<div class="pf-logo">
+  <div class="pf-cloud"><span style="color:#f0c010">⚡</span>PF<span style="color:#f0a010;font-size:10px">☀</span></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+// CLOCK
+// ═══════════════════════════════════════════════
+function tickClock(){
+  document.getElementById('clock').textContent=
+    new Date().toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+tickClock();setInterval(tickClock,1000);
+
+// ═══════════════════════════════════════════════
+// GLOBALS
+// ═══════════════════════════════════════════════
+let WD=null, currentTab='temp', searchTimer=null, animFrame=null;
+const DAYS=['Ne','Po','Út','St','Čt','Pá','So'];
+// canvas & ctx
+let CV=null,CX=null;
+
+// ═══════════════════════════════════════════════
+// SEARCH
+// ═══════════════════════════════════════════════
+const cityQ=document.getElementById('cityQ');
+const sugBox=document.getElementById('sugBox');
+cityQ.addEventListener('input',()=>{
+  clearTimeout(searchTimer);
+  const q=cityQ.value.trim();
+  if(q.length<2){closeSug();return;}
+  searchTimer=setTimeout(()=>doSearch(q),380);
+});
+cityQ.addEventListener('keydown',e=>{if(e.key==='Enter'){clearTimeout(searchTimer);doSearch(cityQ.value.trim());}});
+async function doSearch(q){
+  if(q.length<2)return;
+  openSug('<div class="sug-item"><span style="color:#507090">Hledám…</span></div>');
+  try{
+    const res=await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=10&language=cs&format=json`);
+    const data=await res.json();
+    const hits=(data.results||[]).filter(d=>d.country_code==='CZ');
+    if(!hits.length){openSug('<div class="sug-item"><span style="color:#507090">Nenalezeno</span></div>');return;}
+    openSug(hits.map(d=>{
+      const district=d.admin2||'',region=d.admin1||'';
+      const sub=district&&district!==d.name?district+(region?', '+region:''):region;
+      return `<div class="sug-item" data-lat="${d.latitude}" data-lon="${d.longitude}" data-name="${d.name}${sub?', '+sub:''}" onclick="pickSug(this)">
+        <b>${d.name}</b><span class="sug-sub">${sub}</span>
+        <span class="sug-coords">${d.latitude.toFixed(3)}, ${d.longitude.toFixed(3)}</span></div>`;
+    }).join(''));
+  }catch(e){openSug('<div class="sug-item"><span style="color:#ff6060">Chyba připojení</span></div>');}
+}
+function openSug(html){sugBox.innerHTML=html;sugBox.className='sug-box open';}
+function closeSug(){sugBox.className='sug-box';sugBox.innerHTML='';}
+function pickSug(el){
+  cityQ.value=el.dataset.name;
+  document.getElementById('latIn').value=parseFloat(el.dataset.lat).toFixed(5);
+  document.getElementById('lonIn').value=parseFloat(el.dataset.lon).toFixed(5);
+  closeSug();loadWeather(parseFloat(el.dataset.lat),parseFloat(el.dataset.lon),el.dataset.name);
+}
+document.addEventListener('click',e=>{if(!e.target.closest('.loc-bar'))closeSug();});
+
+// ═══════════════════════════════════════════════
+// GPS
+// ═══════════════════════════════════════════════
+function useGPS(){
+  if(!navigator.geolocation){setState('🚫','Geolokace není dostupná');return;}
+  setState('📡','Zjišťuji GPS polohu…');
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const lat=pos.coords.latitude,lon=pos.coords.longitude;
+    document.getElementById('latIn').value=lat.toFixed(5);
+    document.getElementById('lonIn').value=lon.toFixed(5);
+    reverseGeocode(lat,lon);
+  },err=>{
+    const m={1:'GPS zamítnuto.',2:'GPS signál nedostupný.',3:'GPS – vypršel čas.'};
+    setState('❌',m[err.code]||'Chyba GPS');
+  },{enableHighAccuracy:true,timeout:15000});
+}
+async function reverseGeocode(lat,lon){
+  try{
+    const r=await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=cs`);
+    const d=await r.json();
+    const name=d.locality||d.city||d.principalSubdivision||`${lat.toFixed(4)},${lon.toFixed(4)}`;
+    cityQ.value=name;loadWeather(lat,lon,name+' (GPS)');
+  }catch(e){loadWeather(lat,lon,`GPS ${lat.toFixed(4)},${lon.toFixed(4)}`);}
+}
+function useCoords(){
+  const lat=parseFloat(document.getElementById('latIn').value);
+  const lon=parseFloat(document.getElementById('lonIn').value);
+  if(isNaN(lat)||isNaN(lon)){setState('⚠️','Zadej platné souřadnice');return;}
+  cityQ.value=`${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+  loadWeather(lat,lon,`${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+}
+
+// ═══════════════════════════════════════════════
+// LOAD WEATHER
+// ═══════════════════════════════════════════════
+async function loadWeather(lat,lon,name){
+  setState('⏳',`Načítám data pro <b>${name}</b>…`);
+  try{
+    const url=`https://api.open-meteo.com/v1/forecast`
+      +`?latitude=${lat}&longitude=${lon}`
+      +`&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,dewpoint_2m,`
+      +`wind_speed_10m,wind_gusts_10m,wind_direction_10m,precipitation,snowfall,`
+      +`cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,surface_pressure,`
+      +`weathercode,is_day`
+      +`&current=temperature_2m,apparent_temperature,relative_humidity_2m,`
+      +`wind_speed_10m,wind_gusts_10m,wind_direction_10m,surface_pressure,cloud_cover,precipitation,weathercode,is_day`
+      +`&forecast_days=4&past_days=1&timezone=Europe%2FPrague`;
+    const res=await fetch(url);
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    WD=await res.json();
+    renderMetrics();
+    document.getElementById('metrics').style.display='grid';
+    document.getElementById('tabs').style.display='flex';
+    const cs=document.getElementById('chartSection');
+    cs.style.display='flex';cs.style.flexDirection='column';
+    document.getElementById('stateDiv').style.display='none';
+    initCanvas();
+    draw();
+    setStatus(`✓ ${name} · ${new Date().toLocaleTimeString('cs-CZ')}`);
+  }catch(e){
+    setState('⚠️','Nepodařilo se načíst data.<br>Zkontroluj připojení.');
+    setStatus('Chyba: '+e.message);
+  }
+}
+function renderMetrics(){
+  const c=WD.current,h=WD.hourly;
+  const idx=Math.max(0,h.time.findIndex(t=>new Date(t)>Date.now())-1);
+  document.getElementById('mTemp').textContent=Math.round(c.temperature_2m);
+  document.getElementById('mFeel').textContent=(c.apparent_temperature>=0?'+':'')+Math.round(c.apparent_temperature)+'°';
+  document.getElementById('mWind').textContent=Math.round(c.wind_speed_10m);
+  document.getElementById('mGust').textContent='▲'+Math.round(c.wind_gusts_10m);
+  document.getElementById('mHum').textContent=Math.round(c.relative_humidity_2m)+'%';
+  document.getElementById('mDew').textContent='ros.'+Math.round(h.dewpoint_2m[idx])+'°';
+  document.getElementById('mPres').textContent=Math.round(c.surface_pressure);
+  document.getElementById('mCloud').textContent=Math.round(c.cloud_cover)+'%';
+}
+function setState(ico,msg){
+  document.getElementById('metrics').style.display='none';
+  document.getElementById('tabs').style.display='none';
+  document.getElementById('chartSection').style.display='none';
+  const el=document.getElementById('stateDiv');
+  el.style.display='block';el.innerHTML=`<div class="state-ico">${ico}</div><span>${msg}</span>`;
+}
+function setStatus(msg){document.getElementById('statusBar').textContent=msg;}
+function setTab(el){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');currentTab=el.dataset.tab;
+  if(WD)draw();
+}
+
+// ═══════════════════════════════════════════════
+// CANVAS INIT & RESIZE
+// ═══════════════════════════════════════════════
+function initCanvas(){
+  CV=document.getElementById('chartCanvas');
+  CX=CV.getContext('2d');
+  // set canvas size to fill section
+  resizeCanvas();
+  window.addEventListener('resize',()=>{resizeCanvas();if(WD)draw();});
+  // touch/mouse events
+  CV.addEventListener('mousemove',onMove);
+  CV.addEventListener('touchmove',e=>{e.preventDefault();onMove(e.touches[0]);},{passive:false});
+  CV.addEventListener('mouseleave',()=>{hoverIdx=null;if(WD)draw();updateHoverBar(null);});
+  CV.addEventListener('touchend',()=>{hoverIdx=null;});
+}
+function resizeCanvas(){
+  const sec=document.getElementById('chartSection');
+  const hb=document.getElementById('hoverBar');
+  const lb=document.getElementById('legendBar');
+  const availH=sec.offsetHeight-hb.offsetHeight-lb.offsetHeight-2;
+  CV.width=sec.offsetWidth;
+  CV.height=Math.max(availH,200);
+  CV.style.width='100%';
+  CV.style.height=CV.height+'px';
+}
+
+// hover
+let hoverIdx=null;
+function onMove(e){
+  if(!WD||!CV)return;
+  const rect=CV.getBoundingClientRect();
+  const mx=e.clientX-rect.left;
+  const {pL,pR,total}=getLayout();
+  const chartW=CV.width-pL-pR;
+  let idx=Math.round((mx-pL)/chartW*(total-1));
+  idx=Math.max(0,Math.min(total-1,idx));
+  if(idx!==hoverIdx){hoverIdx=idx;draw();updateHoverBar(idx);}
+}
+function updateHoverBar(idx){
+  if(idx===null||!WD){
+    const c=WD?WD.current:null;
+    if(!c)return;
+    document.getElementById('hv_t').textContent=Math.round(c.temperature_2m);
+    document.getElementById('hv_w').textContent=Math.round(c.wind_speed_10m);
+    document.getElementById('hv_h').textContent=Math.round(c.relative_humidity_2m);
+    document.getElementById('hv_c').textContent=Math.round(c.cloud_cover);
+    document.getElementById('hv_time').textContent='teď';
+    return;
+  }
+  const h=WD.hourly;const {s}=getSlice();const i=s+idx;
+  document.getElementById('hv_t').textContent=Math.round(h.temperature_2m[i]);
+  document.getElementById('hv_w').textContent=Math.round(h.wind_speed_10m[i]);
+  document.getElementById('hv_h').textContent=Math.round(h.relative_humidity_2m[i]);
+  document.getElementById('hv_c').textContent=Math.round(h.cloud_cover[i]);
+  document.getElementById('hv_time').textContent=new Date(h.time[i])
+    .toLocaleString('cs-CZ',{weekday:'short',hour:'2-digit',minute:'2-digit'});
+}
+
+// ═══════════════════════════════════════════════
+// LAYOUT & SLICE
+// ═══════════════════════════════════════════════
+function getSlice(){
+  const times=WD.hourly.time;
+  const nowMs=Date.now();
+  let cur=times.findIndex(t=>new Date(t).getTime()>nowMs)-1;
+  if(cur<0)cur=0;
+  const s=Math.max(0,cur-5);
+  const e=Math.min(times.length-1,cur+71);
+  return{s,e,cur,split:cur-s};
+}
+function getLayout(){
+  const W=CV.width,H=CV.height;
+  const pL=38,pR=38; // left/right padding for y-axes
+  const TIME_H=30;   // time axis height (hours + days = 2 rows)
+  const ICON_H=18;   // weather icon row
+  const ARROW_H=14;  // wind arrow row (only wind tab)
+  const PRECIP_H=currentTab==='cloud'?0:36; // precipitation overlay (not in cloud tab)
+  const hasArrow=currentTab==='wind';
+  const topPad=ICON_H+(hasArrow?ARROW_H:0)+4;
+  const chartH=H-topPad-PRECIP_H-TIME_H;
+  const {s,e}=getSlice();
+  const total=e-s+1;
+  return{W,H,pL,pR,TIME_H,ICON_H,ARROW_H,PRECIP_H,topPad,chartH,total,s,e};
+}
+
+// ═══════════════════════════════════════════════
+// MASTER DRAW
+// ═══════════════════════════════════════════════
+function draw(){
+  if(!CV||!WD)return;
+  CX.clearRect(0,0,CV.width,CV.height);
+  const L=getLayout();
+  const {s,e,split,cur}=getSlice();
+  const h=WD.hourly;
+  const idxs=Array.from({length:L.total},(_,i)=>s+i);
+
+  // helper: x position for data index i (0..total-1)
+  function xOf(i){return L.pL+i*(CV.width-L.pL-L.pR)/(L.total-1);}
+
+  // ── ICON ROW ──
+  drawIconRow(L,idxs,h,xOf);
+
+  // ── WIND ARROW ROW ──
+  if(currentTab==='wind') drawWindArrows(L,idxs,h,xOf);
+
+  // chart area top/bottom
+  const cTop=L.topPad;
+  const cBot=L.topPad+L.chartH;
+
+  // ── MIDNIGHT LINES ──
+  drawMidnightLines(idxs,cTop,cBot,xOf);
+
+  // ── NOW LINE ──
+  drawNowLine(split,cTop,cBot,xOf);
+
+  // ── MAIN CHART by tab ──
+  if(currentTab==='temp')   drawTemp(L,idxs,h,xOf,cTop,cBot,split);
+  else if(currentTab==='wind')  drawWind(L,idxs,h,xOf,cTop,cBot,split);
+  else if(currentTab==='cloud') drawCloud(L,idxs,h,xOf,cTop,cBot,split);
+  else if(currentTab==='hum')   drawHum(L,idxs,h,xOf,cTop,cBot,split);
+
+  // ── PRECIPITATION OVERLAY (all except cloud) ──
+  if(currentTab!=='cloud') drawPrecipOverlay(L,idxs,h,xOf,cBot);
+
+  // ── TIME AXIS ──
+  drawTimeAxis(L,idxs,xOf);
+
+  // ── Y AXES ──
+  drawYAxes(L,idxs,h,xOf,cTop,cBot);
+
+  // ── HOVER CROSSHAIR ──
+  if(hoverIdx!==null) drawCrosshair(hoverIdx,cTop,cBot,xOf);
+
+  // ── PF WATERMARK ──
+  CX.save();
+  CX.font=`bold ${Math.min(CV.width/5,50)}px sans-serif`;
+  CX.fillStyle='rgba(120,160,200,0.045)';
+  CX.textAlign='center';CX.textBaseline='middle';
+  CX.fillText('PF',CV.width/2,cTop+(cBot-cTop)/2);
+  CX.restore();
+}
+
+// ═══════════════════════════════════════════════
+// ICON ROW
+// ═══════════════════════════════════════════════
+function wmoIcon(code,isDay){
+  if(code===0)return isDay?'☀️':'🌙';
+  if(code===1)return isDay?'🌤':'🌤';
+  if(code===2)return '⛅';
+  if(code===3)return '☁️';
+  if(code<=49)return '🌫';
+  if(code<=57)return '🌦';
+  if(code<=67)return '🌧';
+  if(code<=77)return '🌨';
+  if(code<=82)return '🌧';
+  if(code<=86)return '❄️';
+  return '⛈';
+}
+// Cloud fraction to cloud icon overlay (drawn on top of sun/moon)
+function cloudFracIcon(pct){
+  if(pct<15)return '';   // clear – just sun/moon
+  if(pct<40)return '🌤'; // few clouds
+  if(pct<70)return '⛅'; // partly cloudy
+  if(pct<95)return '🌥'; // mostly cloudy
+  return '☁️';           // overcast
+}
+function drawIconRow(L,idxs,h,xOf){
+  const y=L.ICON_H/2+1;
+  const step=CV.width/(L.total);
+  // decide how many to show
+  const every=step<14?6:step<20?3:1;
+  CX.save();
+  CX.font='13px serif';CX.textAlign='center';CX.textBaseline='middle';
+  for(let i=0;i<L.total;i+=every){
+    const idx=idxs[i];
+    // Use weathercode icon but override with cloud fraction if clearer
+    const code=h.weathercode[idx];
+    const isDay=h.is_day[idx];
+    let icon=wmoIcon(code,isDay);
+    // additionally show cloud influence
+    const cl=h.cloud_cover[idx];
+    if(code===0&&cl>=15) icon=cloudFracIcon(cl)+(isDay?'':'🌙');
+    CX.fillText(icon,xOf(i),y);
+  }
+  CX.restore();
+}
+
+// ═══════════════════════════════════════════════
+// WIND ARROWS ROW
+// ═══════════════════════════════════════════════
+const DIR_ARROWS=['↑','↗','→','↘','↓','↙','←','↖'];
+function dirArrow(deg){return DIR_ARROWS[Math.round(((deg+180)%360)/45)%8];}
+function drawWindArrows(L,idxs,h,xOf){
+  const y=L.ICON_H+L.ARROW_H/2+1;
+  CX.save();
+  CX.font='10px sans-serif';CX.textAlign='center';CX.textBaseline='middle';
+  CX.fillStyle='#7090b8';
+  // try every 1h, fallback to 2h if crowded
+  const step=(CV.width-L.pL-L.pR)/(L.total-1);
+  const every=step<10?2:1;
+  for(let i=0;i<L.total;i+=every){
+    const idx=idxs[i];
+    const deg=h.wind_direction_10m[idx];
+    CX.fillText(dirArrow(deg),xOf(i),y);
+  }
+  CX.restore();
+}
+
+// ═══════════════════════════════════════════════
+// MIDNIGHT LINES
+// ═══════════════════════════════════════════════
+function drawMidnightLines(idxs,cTop,cBot,xOf){
+  CX.save();
+  CX.setLineDash([4,6]);
+  CX.strokeStyle='rgba(80,130,200,0.35)';
+  CX.lineWidth=1;
+  for(let i=1;i<idxs.length;i++){
+    if(new Date(WD.hourly.time[idxs[i]]).getHours()===0){
+      const x=xOf(i);
+      CX.beginPath();CX.moveTo(x,cTop);CX.lineTo(x,cBot);CX.stroke();
+    }
+  }
+  CX.setLineDash([]);CX.restore();
+}
+
+// ═══════════════════════════════════════════════
+// NOW LINE
+// ═══════════════════════════════════════════════
+function drawNowLine(split,cTop,cBot,xOf){
+  const x=xOf(split);
+  CX.save();
+  CX.setLineDash([4,4]);CX.strokeStyle='rgba(255,80,80,0.6)';CX.lineWidth=1.5;
+  CX.beginPath();CX.moveTo(x,cTop);CX.lineTo(x,cBot);CX.stroke();
+  CX.setLineDash([]);
+  CX.fillStyle='rgba(255,110,110,0.9)';CX.font='bold 9px sans-serif';
+  CX.textAlign='left';CX.textBaseline='top';
+  CX.fillText('▼teď',x+2,cTop+1);
+  CX.restore();
+}
+
+// ═══════════════════════════════════════════════
+// CROSSHAIR
+// ═══════════════════════════════════════════════
+function drawCrosshair(idx,cTop,cBot,xOf){
+  const x=xOf(idx);
+  CX.save();
+  CX.setLineDash([2,3]);CX.strokeStyle='rgba(200,220,255,0.25)';CX.lineWidth=1;
+  CX.beginPath();CX.moveTo(x,cTop);CX.lineTo(x,cBot);CX.stroke();
+  CX.setLineDash([]);CX.restore();
+}
+
+// ═══════════════════════════════════════════════
+// TIME AXIS (hours top row + days bottom row)
+// ═══════════════════════════════════════════════
+function drawTimeAxis(L,idxs,xOf){
+  const axisTop=L.topPad+L.chartH+(currentTab!=='cloud'?L.PRECIP_H:0);
+  const row1=axisTop+11; // hours
+  const row2=axisTop+22; // days
+  CX.save();
+  CX.textAlign='center';
+  let lastDay=-1;
+  for(let i=0;i<L.total;i++){
+    const d=new Date(WD.hourly.time[idxs[i]]);
+    const hr=d.getHours();
+    const x=xOf(i);
+    // small tick every hour
+    CX.strokeStyle='rgba(30,50,80,0.8)';CX.lineWidth=1;
+    CX.beginPath();CX.moveTo(x,axisTop);CX.lineTo(x,axisTop+3);CX.stroke();
+    // hour label every 6h
+    if(hr%6===0){
+      CX.strokeStyle='rgba(50,80,130,0.8)';CX.lineWidth=1;
+      CX.beginPath();CX.moveTo(x,axisTop);CX.lineTo(x,axisTop+5);CX.stroke();
+      CX.fillStyle='#6090b8';CX.font='9px sans-serif';
+      CX.fillText(String(hr).padStart(2,'0'),x,row1);
+    }
+    // day label at midnight (or first point)
+    const day=d.getDay();
+    if((hr===0||i===0)&&day!==lastDay){
+      lastDay=day;
+      CX.fillStyle='#7090b8';CX.font='bold 9px sans-serif';
+      CX.fillText(DAYS[day],x,row2);
+    }
+  }
+  CX.restore();
+}
+
+// ═══════════════════════════════════════════════
+// HELPERS: line drawing with fill
+// ═══════════════════════════════════════════════
+function valToY(v,min,max,cTop,cBot){
+  return cBot-(v-min)/(max-min)*(cBot-cTop);
+}
+function drawFilledLine(vals,xOf,cTop,cBot,min,max,strokeColor,fillColor,dash,cLeft,cRight){
+  const pts=vals.map((v,i)=>v!==null?{x:xOf(i),y:valToY(v,min,max,cTop,cBot)}:null);
+  // fill
+  CX.save();
+  if(fillColor){
+    CX.beginPath();
+    let started=false;
+    for(let i=0;i<pts.length;i++){
+      if(pts[i]===null)continue;
+      if(!started){CX.moveTo(pts[i].x,cBot);CX.lineTo(pts[i].x,pts[i].y);started=true;}
+      else CX.lineTo(pts[i].x,pts[i].y);
+    }
+    // close
+    for(let i=pts.length-1;i>=0;i--){if(pts[i]!==null){CX.lineTo(pts[i].x,cBot);break;}}
+    CX.closePath();
+    if(typeof fillColor==='string')CX.fillStyle=fillColor;
+    else CX.fillStyle=fillColor; // CanvasGradient
+    CX.fill();
+  }
+  // stroke
+  CX.beginPath();
+  if(dash)CX.setLineDash(dash);
+  CX.strokeStyle=strokeColor;CX.lineWidth=2;
+  let first=true;
+  for(let i=0;i<pts.length;i++){
+    if(pts[i]===null){first=true;continue;}
+    if(first){CX.moveTo(pts[i].x,pts[i].y);first=false;}
+    else CX.lineTo(pts[i].x,pts[i].y);
+  }
+  CX.stroke();
+  CX.setLineDash([]);CX.restore();
+}
+
+// ═══════════════════════════════════════════════
+// DATA LABELS (maxima/minima)
+// ═══════════════════════════════════════════════
+function drawDataLabels(vals,xOf,cTop,cBot,min,max,unit,color){
+  CX.save();
+  CX.font='bold 9px sans-serif';CX.fillStyle=color||'rgba(220,240,255,0.9)';CX.textAlign='center';
+  for(let i=1;i<vals.length-1;i++){
+    const v=vals[i],p=vals[i-1],n=vals[i+1];
+    if(v===null||p===null||n===null)continue;
+    const isMax=v>=p&&v>=n&&v>p+0.4;
+    const isMin=v<=p&&v<=n&&v<p-0.4;
+    if(isMax||isMin){
+      const x=xOf(i);
+      const y=valToY(v,min,max,cTop,cBot);
+      CX.fillText(Math.round(v)+(unit||''),x,isMax?y-5:y+12);
+    }
+  }
+  CX.restore();
+}
+
+// ═══════════════════════════════════════════════
+// Y AXES
+// ═══════════════════════════════════════════════
+function drawYAxes(L,idxs,h,xOf,cTop,cBot){
+  // delegated per tab in draw functions
+}
+function drawLeftAxis(min,max,cTop,cBot,unit,color){
+  const steps=5;
+  CX.save();CX.textAlign='right';CX.font='9px sans-serif';CX.fillStyle=color||'#507090';
+  for(let i=0;i<=steps;i++){
+    const v=min+(max-min)*i/steps;
+    const y=valToY(v,min,max,cTop,cBot);
+    CX.fillText(Math.round(v)+(unit||''),L_PAD-3,y+3);
+    // grid
+    CX.strokeStyle='rgba(30,60,100,0.25)';CX.lineWidth=1;CX.setLineDash([2,4]);
+    CX.beginPath();CX.moveTo(L_PAD,y);CX.lineTo(CV.width-R_PAD,y);CX.stroke();
+    CX.setLineDash([]);
+  }
+  CX.restore();
+}
+function drawRightAxis(min,max,cTop,cBot,unit,color){
+  const steps=5;
+  CX.save();CX.textAlign='left';CX.font='9px sans-serif';CX.fillStyle=color||'#507090';
+  for(let i=0;i<=steps;i++){
+    const v=min+(max-min)*i/steps;
+    const y=valToY(v,min,max,cTop,cBot);
+    CX.fillText(Math.round(v*10)/10+(unit||''),CV.width-R_PAD+3,y+3);
+  }
+  CX.restore();
+}
+let L_PAD=38,R_PAD=38;
+
+// ═══════════════════════════════════════════════
+// PRECIPITATION OVERLAY
+// ═══════════════════════════════════════════════
+function drawPrecipOverlay(L,idxs,h,xOf,cBot){
+  const pr=idxs.map(i=>h.precipitation[i]);
+  const sn=idxs.map(i=>h.snowfall[i]);
+  const maxPr=Math.max(...pr,...sn,1);
+  const pTop=cBot;
+  const pBot=cBot+L.PRECIP_H-2;
+  // right axis for precip
+  CX.save();CX.textAlign='left';CX.font='9px sans-serif';CX.fillStyle='#3c7aaa';
+  CX.fillText('0mm',CV.width-L.pR+2,pBot+3);
+  CX.fillText(maxPr.toFixed(1)+'mm',CV.width-L.pR+2,pTop+8);
+  // bars
+  const barW=Math.max(1,(CV.width-L.pL-L.pR)/(L.total)-0.5);
+  for(let i=0;i<L.total;i++){
+    const x=xOf(i)-barW/2;
+    const totalPr=(pr[i]||0)+(sn[i]||0);
+    const barH=(totalPr/maxPr)*(pBot-pTop);
+    if(barH>0.2){
+      // rain
+      const rainH=(pr[i]||0)/maxPr*(pBot-pTop);
+      CX.fillStyle='rgba(60,140,255,0.75)';
+      CX.fillRect(x,pBot-rainH,barW,rainH);
+      // snow on top
+      const snowH=(sn[i]||0)/maxPr*(pBot-pTop);
+      CX.fillStyle='rgba(180,220,255,0.65)';
+      CX.fillRect(x,pBot-rainH-snowH,barW,snowH);
+    }
+  }
+  // separator line
+  CX.strokeStyle='rgba(30,60,100,0.5)';CX.lineWidth=1;
+  CX.beginPath();CX.moveTo(L.pL,pTop);CX.lineTo(CV.width-L.pR,pTop);CX.stroke();
+  CX.restore();
+}
+
+// ═══════════════════════════════════════════════
+// TEMP CHART
+// ═══════════════════════════════════════════════
+function drawTemp(L,idxs,h,xOf,cTop,cBot,split){
+  L_PAD=L.pL;R_PAD=L.pR;
+  const temps=idxs.map(i=>h.temperature_2m[i]);
+  const feels=idxs.map(i=>h.apparent_temperature[i]);
+  const allVals=[...temps,...feels].filter(v=>v!==null);
+  const mn=Math.min(...allVals)-2,mx=Math.max(...allVals)+2;
+
+  // y=0 line
+  if(mn<0&&mx>0){
+    const y0=valToY(0,mn,mx,cTop,cBot);
+    CX.save();CX.strokeStyle='rgba(100,140,200,0.3)';CX.lineWidth=1;CX.setLineDash([4,4]);
+    CX.beginPath();CX.moveTo(L.pL,y0);CX.lineTo(CV.width-L.pR,y0);CX.stroke();
+    CX.setLineDash([]);CX.restore();
+  }
+
+  // Build gradient fill: orange above 0, light-blue below 0
+  function makeTempGrad(alpha){
+    const grad=CX.createLinearGradient(0,cTop,0,cBot);
+    if(mn>=0){
+      // all above zero – orange
+      grad.addColorStop(0,`rgba(255,130,30,${alpha})`);
+      grad.addColorStop(1,`rgba(255,130,30,0.02)`);
+    } else if(mx<=0){
+      // all below zero – blue
+      grad.addColorStop(0,`rgba(100,180,255,${alpha})`);
+      grad.addColorStop(1,`rgba(100,180,255,0.02)`);
+    } else {
+      // mixed – zero crossover
+      const zeroFrac=(mx-0)/(mx-mn); // fraction from top where zero is
+      grad.addColorStop(0,`rgba(255,130,30,${alpha})`);
+      grad.addColorStop(Math.min(0.99,zeroFrac-0.01),`rgba(255,130,30,${alpha*0.3})`);
+      grad.addColorStop(Math.min(0.99,zeroFrac+0.01),`rgba(100,180,255,${alpha*0.3})`);
+      grad.addColorStop(1,`rgba(100,180,255,0.02)`);
+    }
+    return grad;
+  }
+
+  // full fill (hist + fore)
+  drawFilledLine(temps,xOf,cTop,cBot,mn,mx,'#ff8c28',makeTempGrad(0.6),[],[],CV.width-L.pR);
+  // hist stroke solid
+  const histTemps=temps.map((v,i)=>i<=split?v:null);
+  const foreTemps=temps.map((v,i)=>i>=split?v:null);
+  drawFilledLine(histTemps,xOf,cTop,cBot,mn,mx,'#ff8c28',null,null);
+  // fore stroke dashed (no extra fill, already filled above)
+  drawFilledLine(foreTemps,xOf,cTop,cBot,mn,mx,'#ff8c28',null,[6,4]);
+
+  // feels line (no fill, both parts)
+  const histFeels=feels.map((v,i)=>i<=split?v:null);
+  const foreFeels=feels.map((v,i)=>i>=split?v:null);
+  drawFilledLine(histFeels,xOf,cTop,cBot,mn,mx,'#5ab0ff',null,null);
+  drawFilledLine(foreFeels,xOf,cTop,cBot,mn,mx,'#5ab0ff',null,[4,4]);
+
+  // data labels
+  drawDataLabels(temps,xOf,cTop,cBot,mn,mx,'°','rgba(255,200,120,0.95)');
+  drawDataLabels(feels,xOf,cTop,cBot,mn,mx,'°','rgba(140,200,255,0.85)');
+
+  // axes
+  drawLeftAxisFull(mn,mx,cTop,cBot,'°C','#7090b0');
+
+  setLegend([
+    {color:'#ff8c28',label:'Teplota °C',dash:false},
+    {color:'#ff8c28',label:'předpověď',dash:true},
+    {color:'#5ab0ff',label:'Pocitová °C',dash:false},
+  ]);
+}
+
+// ═══════════════════════════════════════════════
+// WIND CHART
+// ═══════════════════════════════════════════════
+function drawWind(L,idxs,h,xOf,cTop,cBot,split){
+  L_PAD=L.pL;R_PAD=L.pR;
+  const ws=idxs.map(i=>h.wind_speed_10m[i]);
+  const wg=idxs.map(i=>h.wind_gusts_10m[i]);
+  const mx=Math.max(...ws,...wg)+3;
+  const mn=0;
+
+  // fill wind speed full
+  const grad=CX.createLinearGradient(0,cTop,0,cBot);
+  grad.addColorStop(0,'rgba(40,220,120,0.55)');grad.addColorStop(1,'rgba(40,220,120,0.02)');
+  drawFilledLine(ws,xOf,cTop,cBot,mn,mx,'#28dc78',grad,null);
+  // hist/fore
+  const wsH=ws.map((v,i)=>i<=split?v:null);
+  const wsF=ws.map((v,i)=>i>=split?v:null);
+  drawFilledLine(wsH,xOf,cTop,cBot,mn,mx,'#28dc78',null,null);
+  drawFilledLine(wsF,xOf,cTop,cBot,mn,mx,'#28dc78',null,[6,4]);
+  // gusts
+  const wgH=wg.map((v,i)=>i<=split?v:null);
+  const wgF=wg.map((v,i)=>i>=split?v:null);
+  drawFilledLine(wgH,xOf,cTop,cBot,mn,mx,'#ff5050',null,null);
+  drawFilledLine(wgF,xOf,cTop,cBot,mn,mx,'#ff5050',null,[3,3]);
+
+  drawDataLabels(ws,xOf,cTop,cBot,mn,mx,'','rgba(100,255,160,0.9)');
+  drawDataLabels(wg,xOf,cTop,cBot,mn,mx,'','rgba(255,140,140,0.85)');
+
+  // left axis km/h
+  drawLeftAxisFull(mn,mx,cTop,cBot,' km/h','#5a9a70');
+  // right axis m/s  (correct conversion: km/h → m/s = /3.6)
+  drawRightAxisFull(mn/3.6,mx/3.6,cTop,cBot,' m/s','#4a8060');
+
+  setLegend([
+    {color:'#28dc78',label:'Vítr km/h (pravá: m/s)',dash:false},
+    {color:'#ff5050',label:'Nárazy km/h',dash:false},
+  ]);
+}
+
+// ═══════════════════════════════════════════════
+// CLOUD CHART
+// ═══════════════════════════════════════════════
+function drawCloud(L,idxs,h,xOf,cTop,cBot,split){
+  L_PAD=L.pL;R_PAD=L.pR;
+  // altitude bands mapped to y
+  const KM=[0,2,6.5,10];
+  function kmToY(km){return cBot-(km/10)*(cBot-cTop);}
+
+  // horizontal km lines
+  CX.save();
+  KM.forEach(km=>{
+    const y=kmToY(km);
+    CX.strokeStyle='rgba(40,80,140,0.45)';CX.lineWidth=1;
+    CX.beginPath();CX.moveTo(L.pL,y);CX.lineTo(CV.width-L.pR,y);CX.stroke();
+    CX.fillStyle='#507090';CX.font='9px sans-serif';CX.textAlign='right';
+    CX.fillText(km===0?'0km':km+'km',L.pL-2,y+3);
+  });
+
+  // draw band: fills area between yBot and yBot - pct*bandH
+  function drawBand(data,yTop,yBot,color){
+    CX.save();CX.beginPath();
+    let started=false;
+    for(let i=0;i<L.total;i++){
+      const pct=Math.min(100,Math.max(0,data[i]||0))/100;
+      const bandH=yBot-yTop;
+      const y=yBot-pct*bandH;
+      const x=xOf(i);
+      if(!started){CX.moveTo(x,yBot);CX.lineTo(x,y);started=true;}
+      else CX.lineTo(x,y);
+    }
+    // close bottom
+    CX.lineTo(xOf(L.total-1),yBot);
+    CX.lineTo(xOf(0),yBot);
+    CX.closePath();CX.fillStyle=color;CX.fill();CX.restore();
+  }
+
+  drawBand(idxs.map(i=>h.cloud_cover_high[i]),kmToY(10),kmToY(6.5),'rgba(200,220,255,0.2)');
+  drawBand(idxs.map(i=>h.cloud_cover_mid[i]), kmToY(6.5),kmToY(2), 'rgba(128,148,196,0.3)');
+  drawBand(idxs.map(i=>h.cloud_cover_low[i]), kmToY(2),  kmToY(0), 'rgba(80,100,164,0.4)');
+
+  // precip bars below cloud chart (integrated)
+  const pr=idxs.map(i=>h.precipitation[i]);
+  const sn=idxs.map(i=>h.snowfall[i]);
+  const maxPr=Math.max(...pr,...sn,1);
+  const PRECIP_H_CLOUD=30;
+  const pTop2=cBot;const pBot2=cBot+PRECIP_H_CLOUD;
+  const barW=Math.max(1,(CV.width-L.pL-L.pR)/(L.total)-0.5);
+  for(let i=0;i<L.total;i++){
+    const x=xOf(i)-barW/2;
+    const rainH=(pr[i]||0)/maxPr*(pBot2-pTop2);
+    const snowH=(sn[i]||0)/maxPr*(pBot2-pTop2);
+    if(rainH>0.2){CX.fillStyle='rgba(60,140,255,0.75)';CX.fillRect(x,pBot2-rainH,barW,rainH);}
+    if(snowH>0.2){CX.fillStyle='rgba(180,220,255,0.65)';CX.fillRect(x,pBot2-rainH-snowH,barW,snowH);}
+  }
+  // separator
+  CX.strokeStyle='rgba(30,60,100,0.5)';CX.lineWidth=1;
+  CX.beginPath();CX.moveTo(L.pL,pTop2);CX.lineTo(CV.width-L.pR,pTop2);CX.stroke();
+  // right axis precip
+  CX.textAlign='left';CX.font='9px sans-serif';CX.fillStyle='#3c7aaa';
+  CX.fillText(maxPr.toFixed(1)+'mm',CV.width-L.pR+2,pTop2+8);
+  CX.fillText('0mm',CV.width-L.pR+2,pBot2);
+  CX.restore();
+
+  // time axis for cloud: drawn after precip, offset
+  // (already drawn globally in draw())
+
+  setLegend([
+    {color:'#c8deff',label:'Vysoká >6.5km',dash:false},
+    {color:'#8090b8',label:'Střední 2–6.5km',dash:false},
+    {color:'#506098',label:'Nízká 0–2km',dash:false},
+    {color:'#3c8cff',label:'Srážky mm',dash:false},
+  ]);
+}
+
+// ═══════════════════════════════════════════════
+// HUM CHART
+// ═══════════════════════════════════════════════
+function drawHum(L,idxs,h,xOf,cTop,cBot,split){
+  L_PAD=L.pL;R_PAD=L.pR;
+  const hu=idxs.map(i=>h.relative_humidity_2m[i]);
+  const dp=idxs.map(i=>h.dewpoint_2m[i]);
+  const mn=0,mx=100;
+
+  const grad=CX.createLinearGradient(0,cTop,0,cBot);
+  grad.addColorStop(0,'rgba(60,200,240,0.55)');grad.addColorStop(1,'rgba(60,200,240,0.02)');
+  drawFilledLine(hu,xOf,cTop,cBot,mn,mx,'#3cc8f0',grad,null);
+  const huH=hu.map((v,i)=>i<=split?v:null);
+  const huF=hu.map((v,i)=>i>=split?v:null);
+  drawFilledLine(huH,xOf,cTop,cBot,mn,mx,'#3cc8f0',null,null);
+  drawFilledLine(huF,xOf,cTop,cBot,mn,mx,'#3cc8f0',null,[6,4]);
+  drawFilledLine(dp.map((v,i)=>i<=split?v:null),xOf,cTop,cBot,
+    Math.min(...dp)-2,Math.max(...dp)+2,'#a0e0ff',null,null);
+  drawFilledLine(dp.map((v,i)=>i>=split?v:null),xOf,cTop,cBot,
+    Math.min(...dp)-2,Math.max(...dp)+2,'#a0e0ff',null,[4,4]);
+
+  drawDataLabels(hu,xOf,cTop,cBot,mn,mx,'%','rgba(100,220,250,0.9)');
+  const dpAll=idxs.map(i=>h.dewpoint_2m[i]);
+  const dpMn=Math.min(...dpAll)-2,dpMx=Math.max(...dpAll)+2;
+  drawDataLabels(dpAll,xOf,cTop,cBot,dpMn,dpMx,'°','rgba(160,224,255,0.85)');
+  drawLeftAxisFull(mn,mx,cTop,cBot,'%','#5090a0');
+
+  setLegend([
+    {color:'#3cc8f0',label:'Vlhkost %',dash:false},
+    {color:'#a0e0ff',label:'Rosný bod °C',dash:false},
+  ]);
+}
+
+// ═══════════════════════════════════════════════
+// AXIS HELPERS (full grid lines)
+// ═══════════════════════════════════════════════
+function drawLeftAxisFull(mn,mx,cTop,cBot,unit,color){
+  const steps=4;
+  CX.save();CX.textAlign='right';CX.font='9px sans-serif';CX.fillStyle=color||'#507090';
+  for(let i=0;i<=steps;i++){
+    const v=mn+(mx-mn)*i/steps;
+    const y=valToY(v,mn,mx,cTop,cBot);
+    CX.fillText(Math.round(v)+(unit||''),L_PAD-3,y+3);
+    CX.strokeStyle='rgba(30,60,100,0.2)';CX.lineWidth=1;CX.setLineDash([2,4]);
+    CX.beginPath();CX.moveTo(L_PAD,y);CX.lineTo(CV.width-R_PAD,y);CX.stroke();
+    CX.setLineDash([]);
+  }
+  CX.restore();
+}
+function drawRightAxisFull(mn,mx,cTop,cBot,unit,color){
+  const steps=4;
+  CX.save();CX.textAlign='left';CX.font='9px sans-serif';CX.fillStyle=color||'#507090';
+  for(let i=0;i<=steps;i++){
+    const v=mn+(mx-mn)*i/steps;
+    const y=valToY(v,mn,mx,cTop,cBot);
+    CX.fillText((Math.round(v*10)/10)+(unit||''),CV.width-R_PAD+2,y+3);
+  }
+  CX.restore();
+}
+
+// ═══════════════════════════════════════════════
+// LEGEND
+// ═══════════════════════════════════════════════
+function setLegend(items){
+  document.getElementById('legendBar').innerHTML=items.map(it=>`
+    <div class="leg">
+      <div class="leg-swatch" style="${it.dash
+        ?'background:repeating-linear-gradient(90deg,'+it.color+' 0,'+it.color+' 4px,transparent 4px,transparent 8px)'
+        :'background:'+it.color}"></div>
+      ${it.label}
+    </div>`).join('');
+}
+</script>
+</body>
+</html>
